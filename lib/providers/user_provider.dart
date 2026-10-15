@@ -1,81 +1,84 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../models/user_model.dart';
-import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 
-/// Mirrors the signed-in user's Firestore profile in real time.
-///
-/// Kept separate from AuthProvider (which only fetches the profile once,
-/// on sign-in) so that profile edits — from this device or any other —
-/// show up instantly across the app without touching the auth flow.
-/// It listens to Firebase's own auth stream directly, the same way
-/// AuthProvider does, so it stays in sync without needing to be wired
-/// through a ProxyProvider.
+/// Manages user profile state independently of AuthProvider.
+/// Listens to FirebaseAuth directly so it auto-loads when user logs in
+/// and clears when user logs out — no manual wiring needed.
 class UserProvider extends ChangeNotifier {
-  final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  StreamSubscription<User?>? _authSub;
 
   UserModel? _user;
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  StreamSubscription<User?>? _authSub;
-  StreamSubscription<UserModel?>? _userSub;
+  bool _isLoading = false;
+  String? _error;
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
+  String? get error => _error;
 
   UserProvider() {
-    _authSub = _authService.authStateChanges.listen(_onAuthChanged);
+    _listenToAuth();
   }
 
-  void _onAuthChanged(User? firebaseUser) {
-    _userSub?.cancel();
-
-    if (firebaseUser == null) {
-      _user = null;
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    _isLoading = true;
-    _userSub = _firestoreService.userStream(firebaseUser.uid).listen(
-          (userModel) {
-        _user = userModel;
-        _isLoading = false;
-        notifyListeners();
-      },
-      onError: (_) {
-        _isLoading = false;
-        _errorMessage = 'Failed to load profile.';
-        notifyListeners();
-      },
-    );
+  // ── Auto-sync with Firebase Auth ──────────────────────────────────────
+  void _listenToAuth() {
+    _authSub =
+        FirebaseAuth.instance.authStateChanges().listen((fbUser) async {
+          if (fbUser != null) {
+            _isLoading = true;
+            notifyListeners();
+            try {
+              _user = await _firestoreService.getUser(fbUser.uid);
+            } catch (_) {
+              _user = null;
+            }
+            _isLoading = false;
+            notifyListeners();
+          } else {
+            _user = null;
+            _isLoading = false;
+            notifyListeners();
+          }
+        });
   }
 
-  /// Saves profile edits to Firestore. Returns true on success.
+  // ── Manual set (called by AuthProvider after signup/profile update) ───
+  void setUser(UserModel? user) {
+    _user = user;
+    notifyListeners();
+  }
+
+  // ── Update profile in Firestore + local state ─────────────────────────
   Future<bool> updateProfile(UserModel updated) async {
-    _errorMessage = null;
     try {
       await _firestoreService.updateUser(updated);
       _user = updated;
+      _error = null;
       notifyListeners();
       return true;
     } catch (_) {
-      _errorMessage = 'Could not save changes. Please try again.';
+      _error = 'Failed to save profile. Please try again.';
       notifyListeners();
       return false;
     }
   }
 
+  // ── Reload from Firestore ─────────────────────────────────────────────
+  Future<void> refresh() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      _user = await _firestoreService.getUser(uid);
+      notifyListeners();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();
-    _userSub?.cancel();
     super.dispose();
   }
 }

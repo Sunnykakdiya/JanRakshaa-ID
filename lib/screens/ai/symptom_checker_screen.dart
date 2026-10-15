@@ -16,7 +16,6 @@ class SymptomCheckerScreen extends StatefulWidget {
 
 class _SymptomCheckerScreenState extends State<SymptomCheckerScreen> {
   final _symptomsCtrl = TextEditingController();
-  final _gemini = GeminiService();
 
   bool _isLoading = false;
   String? _response;
@@ -29,8 +28,12 @@ class _SymptomCheckerScreenState extends State<SymptomCheckerScreen> {
   }
 
   UserModel? get _user {
-    final up = context.read<UserProvider>().user;
-    return up ?? context.read<AuthProvider>().userModel;
+    final up = context
+        .read<UserProvider>()
+        .user;
+    return up ?? context
+        .read<AuthProvider>()
+        .userModel;
   }
 
   Future<void> _analyze() async {
@@ -55,7 +58,7 @@ class _SymptomCheckerScreenState extends State<SymptomCheckerScreen> {
     });
 
     try {
-      final result = await _gemini.analyzeSymptoms(
+      final result = await GeminiService.checkSymptoms(
         symptoms: symptoms,
         user: user,
       );
@@ -92,118 +95,182 @@ class _SymptomCheckerScreenState extends State<SymptomCheckerScreen> {
         );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Symptom Checker'),
-        actions: [
-          if (_response != null || _error != null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _clear,
-              tooltip: 'Clear & Start Over',
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── AI Banner ──────────────────────────────────
-            _AIBanner(),
+        appBar: AppBar(
+          title: const Text('AI Symptom Checker'),
+          actions: [
+            if (_response != null || _error != null)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _clear,
+                tooltip: 'Clear & Start Over',
+              ),
+          ],
+        ),
+        body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                // ── AI Banner ──────────────────────────────────
+                _AIBanner(),
             const SizedBox(height: 20),
 
             // ── User Medical Context ───────────────────────
             if (user != null) ...[
-              _MedicalContextCard(user: user),
-              const SizedBox(height: 20),
-            ],
+        _MedicalContextCard(user: user),
+    const SizedBox(height: 20),
+    ],
 
-            // ── Symptom Input ──────────────────────────────
-            Text('Describe Your Symptoms',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              'Be as specific as possible — location, severity, duration.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _symptomsCtrl,
-              maxLines: 5,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText:
-                'e.g. Severe headache on the left side for 2 hours, light sensitivity, some nausea...',
-                hintStyle: const TextStyle(
-                    fontSize: 13, color: AppTheme.textSecondary),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide:
-                  const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide:
-                  const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                      color: AppTheme.primaryColor, width: 2),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
+    // ── Symptom Input ──────────────────────────────
+    Text('Describe Your Symptoms',
+    style: Theme.of(context).textTheme.titleLarge),
+    const SizedBox(height: 6),
+    Text(
+    'Be as specific as possible — location, severity, duration.',
+    style: Theme.of(context).textTheme.bodyMedium,
+    ),
+    const SizedBox(height: 12),
+    TextField(
+    controller: _symptomsCtrl,
+    maxLines: 5,
+    textInputAction: TextInputAction.newline,
+    decoration: InputDecoration(
+    hintText:
+    'e.g. Severe headache on the left side for 2 hours, light sensitivity, some nausea...',
+    hintStyle: const TextStyle(
+    fontSize: 13, color: AppTheme.textSecondary),
+    filled: true,
+    fillColor: Colors.white,
+    border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide:
+    const BorderSide(color: Color(0xFFE5E7EB)),
+    ),
+    enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide:
+    const BorderSide(color: Color(0xFFE5E7EB)),
+    ),
+    focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: const BorderSide(
+    color: AppTheme.primaryColor, width: 2),
+    ),
+    contentPadding: const EdgeInsets.all(16),
+    ),
+    ),
 
-            const SizedBox(height: 16),
+    const SizedBox(height: 16),
 
-            // ── Quick Symptom Chips ────────────────────────
-            _QuickSymptomChips(
-              onSelect: (s) {
-                final current = _symptomsCtrl.text;
-                _symptomsCtrl.text =
-                current.isEmpty ? s : '$current, $s';
-              },
-            ),
+    // ── Quick Symptom Chips ────────────────────────
+    _QuickSymptomChips(
+    onSelect: (s) {
+    final current = _symptomsCtrl.text;
+    _symptomsCtrl.text =
+    current.isEmpty ? s : '$current, $s';
+    },
+    ),
 
-            const SizedBox(height: 20),
+    const SizedBox(height: 20),
 
-            // ── Analyze Button ─────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _analyze,
-                icon: _isLoading
-                    ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.psychology),
-                label: Text(_isLoading
-                    ? 'Analyzing...'
-                    : 'Analyze with Gemini AI'),
-              ),
-            ),
+    // ── Analyze Button ─────────────────────────────
+    SizedBox(
+    width: double.infinity,
+    height: 54,
+    child: ElevatedButton.icon(
+    onPressed: _isLoading ? null : _analyze,
+    icon: _isLoading
+    ? const SizedBox(
+    width: 20,
+    height: 20,
+    child: CircularProgressIndicator(
+    color: Colors.white, strokeWidth: 2))
+        : const Icon(Icons.psychology),
+    label: Text(_isLoading
+    ? 'Analyzing...'
+        : 'Analyze with Gemini AI'),
+    ),
+    ),
 
-            const SizedBox(height: 24),
+    const SizedBox(height: 24),
 
-            // ── AI Response ────────────────────────────────
-            AiResponseCard(
-              isLoading: _isLoading,
-              response: _response,
-              error: _error,
-              onRetry: _retry,
-            ),
+    // ── AI Response ────────────────────────────────
 
-            if (_response != null || _error != null)
-              const SizedBox(height: 32),
-          ],
-        ),
-      ),
+    if (_isLoading)
+    Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(
+    color: AppTheme.primaryColor.withValues(alpha: 0.2),
+    ),
+    ),
+    child: const Column(
+    children: [
+    CircularProgressIndicator(),
+    SizedBox(height: 12),
+    Text(
+    'Gemini is analyzing your symptoms...',
+    style: TextStyle(
+    color: AppTheme.textSecondary,
+    ),
+    ),
+    ],
+    ),
+    ),
+
+    if (_error != null)
+    Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+    color: AppTheme.errorColor.withValues(alpha: 0.08),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(
+    color: AppTheme.errorColor.withValues(alpha: 0.3),
+    ),
+    ),
+    child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+    const Text(
+    'AI Analysis Failed',
+    style: TextStyle(
+    fontWeight: FontWeight.bold,
+    color: AppTheme.errorColor,
+    ),
+    ),
+    const SizedBox(height: 8),
+    Text(
+    _error!,
+    style: const TextStyle(
+    color: AppTheme.textPrimary,
+    ),
+    ),
+    const SizedBox(height: 12),
+    ElevatedButton.icon(
+    onPressed: _retry,
+    icon: const Icon(Icons.refresh),
+    label: const Text('Try Again'),
+    ),
+    ],
+    ),
+    ),
+
+    if (_response != null)
+    AiResponseCard(
+    response: _response!,
+    title: 'AI Symptom Analysis',
+    ),
+
+
+    if (_response != null || _error != null)
+    const SizedBox(height: 32),
+    ],
+    ),
+    ),
     );
   }
 }
@@ -250,6 +317,7 @@ class _AIBanner extends StatelessWidget {
 // ── Medical Context Card ───────────────────────────────────────
 class _MedicalContextCard extends StatelessWidget {
   final UserModel user;
+
   const _MedicalContextCard({required this.user});
 
   @override
@@ -275,7 +343,11 @@ class _MedicalContextCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Your Profile Context (sent to AI)',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppTheme.primaryColor),
               ),
@@ -300,7 +372,11 @@ class _MedicalContextCard extends StatelessWidget {
                   user.conditions.isEmpty)
                 Text(
                   'No medical info in profile yet. Add it for better AI context.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(
                       color: AppTheme.textSecondary,
                       fontStyle: FontStyle.italic),
                 ),
@@ -315,6 +391,7 @@ class _MedicalContextCard extends StatelessWidget {
 class _ContextChip extends StatelessWidget {
   final String label;
   final Color color;
+
   const _ContextChip(this.label, this.color);
 
   @override
@@ -336,6 +413,7 @@ class _ContextChip extends StatelessWidget {
 // ── Quick Symptom Chips ───────────────────────────────────────
 class _QuickSymptomChips extends StatelessWidget {
   final Function(String) onSelect;
+
   const _QuickSymptomChips({required this.onSelect});
 
   static const _symptoms = [
@@ -355,7 +433,8 @@ class _QuickSymptomChips extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Quick Add:',
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .bodyMedium
                 ?.copyWith(fontWeight: FontWeight.w600)),
@@ -364,24 +443,25 @@ class _QuickSymptomChips extends StatelessWidget {
           spacing: 8,
           runSpacing: 6,
           children: _symptoms
-              .map((s) => GestureDetector(
-            onTap: () => onSelect(s),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color:
-                    AppTheme.primaryColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(s,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.primaryColor)),
-            ),
-          ))
+              .map((s) =>
+              GestureDetector(
+                onTap: () => onSelect(s),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color:
+                        AppTheme.primaryColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(s,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.primaryColor)),
+                ),
+              ))
               .toList(),
         ),
       ],

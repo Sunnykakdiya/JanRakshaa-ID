@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
+import '../../core/constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/gemini_service.dart';
@@ -15,64 +16,66 @@ class DrugCheckerScreen extends StatefulWidget {
 
 class _DrugCheckerScreenState extends State<DrugCheckerScreen> {
   final _addCtrl = TextEditingController();
-  final _gemini = GeminiService();
+  final _scrollCtrl = ScrollController();
 
-  // Profile medications (pre-loaded) + user-added ones
-  late List<String> _profileMeds;
-  final List<String> _extraMeds = [];
-
+  List<String> _medications = [];
   bool _isLoading = false;
   String? _response;
   String? _error;
+  bool _profileLoaded = false;
 
   @override
-  void initState() {
-    super.initState();
-    final user = context.read<UserProvider>().user ??
-        context.read<AuthProvider>().userModel;
-    _profileMeds = List.from(user?.medications ?? []);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pre-load profile medications once
+    if (!_profileLoaded) {
+      _profileLoaded = true;
+      final user = context.read<UserProvider>().user ??
+          context.read<AuthProvider>().userModel;
+      if (user != null && user.medications.isNotEmpty) {
+        setState(() => _medications = List.from(user.medications));
+      }
+    }
   }
 
   @override
   void dispose() {
     _addCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
-  List<String> get _allMeds => [..._profileMeds, ..._extraMeds];
-
-  void _addMed() {
+  void _addMedication() {
     final val = _addCtrl.text.trim();
     if (val.isEmpty) return;
-    if (_allMeds.any((m) => m.toLowerCase() == val.toLowerCase())) {
+    final alreadyExists =
+    _medications.any((m) => m.toLowerCase() == val.toLowerCase());
+    if (alreadyExists) {
+      _addCtrl.clear();
+      return;
+    }
+    setState(() {
+      _medications.add(val);
+      _addCtrl.clear();
+    });
+  }
+
+  void _remove(String med) =>
+      setState(() => _medications.remove(med));
+
+  Future<void> _checkInteractions() async {
+    if (_medications.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Already in the list')),
+        const SnackBar(
+          content: Text('Add at least 2 medications to check interactions'),
+        ),
       );
       return;
     }
-    setState(() => _extraMeds.add(val));
-    _addCtrl.clear();
-  }
 
-  void _removeExtra(String med) {
-    setState(() => _extraMeds.remove(med));
-    // Reset results when list changes
-    if (_response != null || _error != null) {
-      setState(() {
-        _response = null;
-        _error = null;
-      });
-    }
-  }
-
-  Future<void> _check() async {
-    if (_allMeds.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Add at least 2 medications to check'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
+    final hasKey = await GeminiService.hasApiKey();
+    if (!hasKey && mounted) {
+      _showNoKeyDialog();
       return;
     }
 
@@ -83,25 +86,58 @@ class _DrugCheckerScreenState extends State<DrugCheckerScreen> {
     });
 
     try {
-      final result = await _gemini.checkDrugInteractions(_allMeds);
+      final result = await GeminiService.checkDrugInteractions(
+        medications: _medications,
+      );
       setState(() {
         _response = result;
         _isLoading = false;
       });
-    } catch (e) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        );
+      }
+    } on GeminiException catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e.userMessage;
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Something went wrong. Check your connection.';
         _isLoading = false;
       });
     }
   }
 
-  void _clear() {
-    setState(() {
-      _extraMeds.clear();
-      _response = null;
-      _error = null;
-    });
+  void _showNoKeyDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('API Key Required'),
+        content: const Text(
+            'Set up your free Gemini API key to use AI features.'),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Later')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushNamed(
+                  context, AppConstants.geminiSettingsRoute);
+            },
+            child: const Text('Set Up Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -110,242 +146,297 @@ class _DrugCheckerScreenState extends State<DrugCheckerScreen> {
       appBar: AppBar(
         title: const Text('Drug Interaction Checker'),
         actions: [
-          if (_extraMeds.isNotEmpty || _response != null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _clear,
-              tooltip: 'Clear extra meds & results',
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.pushNamed(
+                context, AppConstants.geminiSettingsRoute),
+            tooltip: 'Gemini Settings',
+          ),
         ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollCtrl,
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Banner ─────────────────────────────────────
-            _Banner(),
-            const SizedBox(height: 20),
+            // ── Header ─────────────────────────────────────────
+            _FeatureHeader(),
+            const SizedBox(height: 24),
 
-            // ── Profile Medications ────────────────────────
-            Text('Your Profile Medications',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-
-            if (_profileMeds.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.orange, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'No medications in your profile. Add them below or go to Edit Profile.',
-                        style: TextStyle(
-                            color: Colors.orange, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _profileMeds
-                    .map((med) => _MedChip(
-                  label: med,
-                  isProfile: true,
-                  onRemove: null, // profile meds can't be removed here
-                ))
-                    .toList(),
-              ),
-
-            const SizedBox(height: 20),
-
-            // ── Add Extra Medications ──────────────────────
-            Text('Add Extra Medications',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              'Add over-the-counter, supplements, or other medications not in your profile.',
-              style: Theme.of(context).textTheme.bodyMedium,
+            // ── Medication List ────────────────────────────────
+            Row(
+              children: [
+                Text('Medications to check',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontSize: 15)),
+                const Spacer(),
+                if (_medications.isNotEmpty)
+                  Text('${_medications.length} added',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12)),
+              ],
             ),
             const SizedBox(height: 12),
 
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _addCtrl,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _addMed(),
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Aspirin 100mg',
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                        const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                        const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                            color: AppTheme.primaryColor, width: 2),
-                      ),
-                      contentPadding:
-                      const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _addMed,
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child:
-                    const Icon(Icons.add, color: Colors.white, size: 22),
-                  ),
-                ),
-              ],
-            ),
-
-            if (_extraMeds.isNotEmpty) ...[
-              const SizedBox(height: 12),
+            // Medication chips
+            if (_medications.isNotEmpty) ...[
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _extraMeds
-                    .map((med) => _MedChip(
-                  label: med,
-                  isProfile: false,
-                  onRemove: () => _removeExtra(med),
+                children: _medications
+                    .map((med) => Chip(
+                  label: Text(med,
+                      style: const TextStyle(fontSize: 13)),
+                  backgroundColor:
+                  AppTheme.primaryColor.withValues(alpha: 0.08),
+                  deleteIcon:
+                  const Icon(Icons.close, size: 16),
+                  deleteIconColor: AppTheme.primaryColor,
+                  side: BorderSide(
+                      color: AppTheme.primaryColor
+                          .withValues(alpha: 0.3)),
+                  onDeleted: () => _remove(med),
                 ))
                     .toList(),
               ),
+              const SizedBox(height: 14),
             ],
 
-            // ── All Meds Summary ───────────────────────────
-            if (_allMeds.isNotEmpty) ...[
-              const SizedBox(height: 16),
+            // Profile medications hint
+            if (_medications.isEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppTheme.primaryColor.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.medication,
-                        color: AppTheme.primaryColor, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Checking ${_allMeds.length} medication${_allMeds.length == 1 ? '' : 's'}: ${_allMeds.join(', ')}',
-                      style: const TextStyle(
-                          color: AppTheme.primaryColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500),
-                    ),
-                  ],
+                child: const Text(
+                  '💊 Medications from your profile are pre-loaded. Add more below to check interactions.',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ),
-            ],
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
-            // ── Check Button ───────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _check,
-                icon: _isLoading
-                    ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.search),
-                label: Text(_isLoading
-                    ? 'Checking Interactions...'
-                    : 'Check Interactions with AI'),
-              ),
+            // ── Add Medication Input ───────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _addCtrl,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addMedication(),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Aspirin 75mg',
+                      labelText: 'Add medication',
+                      prefixIcon: const Icon(
+                          Icons.medication_outlined,
+                          size: 20),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: Color(0xFFE5E7EB))),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: Color(0xFFE5E7EB))),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppTheme.primaryColor,
+                              width: 2)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _addMedication,
+                  child: Container(
+                    height: 54,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.add,
+                        color: Colors.white, size: 24),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+            const Text(
+              'Include brand name or generic name, plus dosage if known.',
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 11),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── Common Medications Quick-Add ──────────────────
+            const Text('Quick add common:',
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _commonMeds
+                  .where((m) => !_medications.contains(m))
+                  .take(8)
+                  .map((m) => GestureDetector(
+                onTap: () => setState(() {
+                  if (!_medications.contains(m)) {
+                    _medications.add(m);
+                  }
+                }),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppTheme.primaryColor
+                            .withValues(alpha: 0.3)),
+                  ),
+                  child: Text('+ $m',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.primaryColor)),
+                ),
+              ))
+                  .toList(),
             ),
 
             const SizedBox(height: 24),
 
-            // ── AI Response ────────────────────────────────
-            AiResponseCard(
-              isLoading: _isLoading,
-              response: _response,
-              error: _error,
-              onRetry: _check,
+            // ── Check Button ───────────────────────────────────
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _checkInteractions,
+              icon: _isLoading
+                  ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.science_outlined),
+              label: Text(_isLoading
+                  ? 'Checking...'
+                  : 'Check Interactions (${_medications.length} meds)'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 54),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
             ),
 
-            if (_response != null || _error != null)
-              const SizedBox(height: 32),
+            const SizedBox(height: 28),
+
+            // ── Error ──────────────────────────────────────────
+            if (_error != null)
+              _ErrorBanner(
+                  message: _error!,
+                  onSettingsTap: _error!.contains('key')
+                      ? () => Navigator.pushNamed(
+                      context, AppConstants.geminiSettingsRoute)
+                      : null),
+
+            // ── AI Response ────────────────────────────────────
+            if (_response != null) ...[
+              AiResponseCard(
+                response: _response!,
+                title: 'Drug Interaction Analysis',
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _response = null),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Check Different Medications'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                        color: AppTheme.primaryColor),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
+
+  static const List<String> _commonMeds = [
+    'Aspirin',
+    'Paracetamol',
+    'Metformin',
+    'Amlodipine',
+    'Atorvastatin',
+    'Omeprazole',
+    'Clopidogrel',
+    'Warfarin',
+    'Insulin',
+    'Metoprolol',
+  ];
 }
 
-// ── Banner ─────────────────────────────────────────────────────
-class _Banner extends StatelessWidget {
+// ── Feature Header ─────────────────────────────────────────────────────
+class _FeatureHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.purple.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.purple.withValues(alpha: 0.25)),
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryColor.withValues(alpha: 0.08),
+            Colors.orange.withValues(alpha: 0.06),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: AppTheme.primaryColor.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.medication,
-                color: Colors.purple, size: 22),
+            child: const Icon(Icons.science_outlined,
+                color: Colors.orange, size: 28),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AI Drug Interaction Checker',
+                Text('Drug Interaction Checker',
                     style: TextStyle(
-                        color: Colors.purple,
                         fontWeight: FontWeight.bold,
-                        fontSize: 14)),
+                        fontSize: 15,
+                        color: AppTheme.primaryColor)),
+                SizedBox(height: 4),
                 Text(
-                  'Uses Gemini to identify potentially dangerous combinations.',
+                  'Checks if your medications are safe to take together. Profile meds are pre-loaded.',
                   style: TextStyle(
-                      color: Colors.purple, fontSize: 12),
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -356,50 +447,42 @@ class _Banner extends StatelessWidget {
   }
 }
 
-// ── Medication Chip ─────────────────────────────────────────────
-class _MedChip extends StatelessWidget {
-  final String label;
-  final bool isProfile;
-  final VoidCallback? onRemove;
+// ── Error Banner ───────────────────────────────────────────────────────
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback? onSettingsTap;
 
-  const _MedChip({
-    required this.label,
-    required this.isProfile,
-    required this.onRemove,
-  });
+  const _ErrorBanner({required this.message, this.onSettingsTap});
 
   @override
   Widget build(BuildContext context) {
-    final color = isProfile ? AppTheme.primaryColor : Colors.purple;
-    return Container(
-      padding: EdgeInsets.fromLTRB(12, 6, onRemove != null ? 4 : 12, 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isProfile ? Icons.person_outline : Icons.add_circle_outline,
-            color: color,
-            size: 14,
-          ),
-          const SizedBox(width: 5),
-          Text(label,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
-          if (onRemove != null) ...[
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: onRemove,
-              child: Icon(Icons.close, color: color, size: 16),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.errorColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border:
+          Border.all(color: AppTheme.errorColor.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline,
+                color: AppTheme.errorColor, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message,
+                  style: const TextStyle(
+                      color: AppTheme.errorColor, fontSize: 13)),
             ),
+            if (onSettingsTap != null)
+              TextButton(
+                onPressed: onSettingsTap,
+                child: const Text('Fix'),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }

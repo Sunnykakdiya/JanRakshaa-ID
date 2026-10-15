@@ -115,27 +115,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       emergencyContactRelation: _ecRelationCtrl.text.trim(),
     );
 
-    final success = await authProvider.updateProfile(updated);
+    await authProvider.updateProfile(updated);
 
     if (mounted) {
       setState(() => _isSaving = false);
-      if (success != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Profile updated successfully!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                authProvider.errorMessage ?? 'Failed to update profile'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Profile updated successfully!'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+      Navigator.pop(context);
     }
   }
 
