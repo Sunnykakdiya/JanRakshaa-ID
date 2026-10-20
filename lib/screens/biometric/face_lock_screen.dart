@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../providers/face_lock_provider.dart';
@@ -9,18 +9,26 @@ class FaceLockScreen extends StatelessWidget {
 
   const FaceLockScreen({super.key, this.redirectRoute});
 
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<FaceLockProvider>();
     final result = provider.lastResult;
     final isGatekeeper = redirectRoute != null;
 
+    // Fixed: Single clean check for enrolled sensors
+    final bool hasFingerprint = provider.enrolledTypes.contains(BiometricType.fingerprint) ||
+        provider.enrolledTypes.contains(BiometricType.face);
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: const Color(0xFF070B14),
       appBar: AppBar(
         title: Text(
-            isGatekeeper ? 'Verify Face to Unlock' : 'Face Biometric Lock'),
-        backgroundColor: Colors.indigo,
+          isGatekeeper
+              ? 'Verify Identity to Unlock'
+              : 'Biometric Vault (Face & Fingerprint)',
+        ),
+        backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -28,124 +36,105 @@ class FaceLockScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Enable / Disable Toggle Card (Hidden in Gatekeeper mode) ──
             if (!isGatekeeper) ...[
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.indigo.withValues(alpha: 0.12),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.lock_person,
-                          color: Colors.indigo, size: 26),
+                      child: const Icon(Icons.fingerprint_rounded,
+                          color: Color(0xFF818CF8), size: 28),
                     ),
                     const SizedBox(width: 14),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Protect My QR ID',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
                           Text(
-                            'Require ML Kit face liveness check before opening QR ID',
+                            'Hardware Biometric Vault',
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Restrict private medical records to enrolled Face ID & Fingerprints only',
+                            style:
+                            TextStyle(fontSize: 11.5, color: Colors.white60),
                           ),
                         ],
                       ),
                     ),
                     Switch(
                       value: provider.isLockEnabled,
-                      activeThumbColor: Colors.indigo,
+                      activeThumbColor: const Color(0xFF00F5D4),
                       onChanged: (val) => provider.toggleLockEnabled(val),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
             ],
 
-            // ── Scanner Hub Card ───────────────────────────────────
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0F172A), Color(0xFF1E1B4B)],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                ),
               ),
               child: Column(
                 children: [
                   Text(
                     isGatekeeper
-                        ? 'Biometric Authentication Required'
-                        : 'ML Kit Face Liveness Check',
+                        ? 'Owner Authentication Required'
+                        : '1-to-Many Hardware Biometric Gate',
                     style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    'Look straight at the front camera with both eyes clearly open.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  const Text(
+                    'Uses your device’s Secure Enclave to match your registered Face Unlock or Fingerprint(s).',
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
 
-                  // Face Preview or Icon
-                  Container(
-                    width: 160,
-                    height: 160,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.indigo.withValues(alpha: 0.08),
-                      border: Border.all(
-                        color: result == null
-                            ? Colors.indigo
-                            : (result.isVerified
-                            ? AppTheme.successColor
-                            : AppTheme.errorColor),
-                        width: 3,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _SensorBadge(
+                        icon: Icons.fingerprint_rounded,
+                        label: 'Biometric Sensor',
+                        active: hasFingerprint || provider.enrolledTypes.isEmpty,
                       ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: provider.lastImagePath != null
-                        ? Image.file(
-                      File(provider.lastImagePath!),
-                      fit: BoxFit.cover,
-                    )
-                        : const Icon(
-                      Icons.face_retouching_natural,
-                      size: 72,
-                      color: Colors.indigo,
-                    ),
+                    ],
                   ),
                   const SizedBox(height: 24),
 
-                  // Scan Button
                   ElevatedButton.icon(
                     onPressed: provider.isProcessing
                         ? null
@@ -158,25 +147,18 @@ class FaceLockScreen extends StatelessWidget {
                             context, redirectRoute!);
                       }
                     },
-                    icon: provider.isProcessing
-                        ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                        : const Icon(Icons.camera_front),
+                    icon: const Icon(Icons.verified_user_rounded),
                     label: Text(
                       provider.isProcessing
-                          ? 'Analyzing Face Liveness...'
-                          : 'Scan Face Now',
+                          ? 'Verifying Biometrics...'
+                          : 'Authenticate Hardware Biometrics',
                       style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
+                          fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
+                      backgroundColor: const Color(0xFF00B4D8),
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
+                      minimumSize: const Size(double.infinity, 52),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -185,14 +167,52 @@ class FaceLockScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
 
-            // ── Liveness Telemetry Result Card ─────────────────────
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.group_add_rounded,
+                      color: Color(0xFF00F5D4), size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '1-to-Many Trusted Family Support',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'You can register up to 5 fingerprints or multiple faces in your phone’s Settings so trusted family members can also unlock your vault.',
+                          style:
+                          TextStyle(color: Colors.white60, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             if (result != null) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF111827),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: result.isVerified
@@ -201,54 +221,25 @@ class FaceLockScreen extends StatelessWidget {
                     width: 1.5,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          result.isVerified
-                              ? Icons.verified_user
-                              : Icons.gpp_bad,
-                          color: result.isVerified
-                              ? AppTheme.successColor
-                              : AppTheme.errorColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            result.isVerified
-                                ? 'Liveness Check Passed'
-                                : 'Verification Failed',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: result.isVerified
-                                  ? AppTheme.successColor
-                                  : AppTheme.errorColor,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      result.isVerified
+                          ? Icons.check_circle_rounded
+                          : Icons.error_outline_rounded,
+                      color: result.isVerified
+                          ? AppTheme.successColor
+                          : AppTheme.errorColor,
+                      size: 26,
                     ),
-                    const SizedBox(height: 8),
-                    Text(result.message, style: const TextStyle(fontSize: 13)),
-                    if (result.leftEyeOpen > 0 || result.rightEyeOpen > 0) ...[
-                      const Divider(height: 24),
-                      _MetricRow(
-                        label: 'Left Eye Open Probability',
-                        value:
-                        '${(result.leftEyeOpen * 100).toStringAsFixed(0)}%',
-                        passed: result.leftEyeOpen >= 0.75,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        result.message,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12.5),
                       ),
-                      const SizedBox(height: 8),
-                      _MetricRow(
-                        label: 'Right Eye Open Probability',
-                        value:
-                        '${(result.rightEyeOpen * 100).toStringAsFixed(0)}%',
-                        passed: result.rightEyeOpen >= 0.75,
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -260,37 +251,40 @@ class FaceLockScreen extends StatelessWidget {
   }
 }
 
-class _MetricRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool passed;
 
-  const _MetricRow({
+class _SensorBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  const _SensorBadge({
+    required this.icon,
     required this.label,
-    required this.value,
-    required this.passed,
+    required this.active,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final color = active ? const Color(0xFF00F5D4) : Colors.white38;
+    return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 13)),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          width: 78,
+          height: 78,
           decoration: BoxDecoration(
-            color: (passed ? AppTheme.successColor : Colors.orange)
-                .withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.12),
+            border: Border.all(color: color, width: 2),
           ),
-          child: Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: passed ? AppTheme.successColor : Colors.orange,
-            ),
+          child: Icon(icon, color: color, size: 38),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],

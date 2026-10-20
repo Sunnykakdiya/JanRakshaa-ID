@@ -30,6 +30,9 @@ class AppConstants {
   static const String faceLockRoute = '/face-lock';
   static const String hospitalFinderRoute = '/hospital-finder';
 
+  static const String firstAidRoute = '/first-aid'; // <-- New Offline First-Aid
+  static const String aboutRoute = '/about';
+
   // ── Blood Groups ──────────────────────────────────────────────────────
   static const List<String> bloodGroups = [
     'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-',

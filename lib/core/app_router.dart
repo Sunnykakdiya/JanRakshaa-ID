@@ -38,6 +38,9 @@ import '../screens/biometric/face_lock_screen.dart';
 // Phase 8 - hospital
 import '../screens/hospital/hospital_finder_screen.dart';
 
+import '../screens/first_aid/first_aid_screen.dart';
+import '../screens/about/about_screen.dart';
+
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -96,6 +99,11 @@ class AppRouter {
       case AppConstants.hospitalFinderRoute:
         return MaterialPageRoute(builder: (_) => const HospitalFinderScreen());
 
+
+      case AppConstants.firstAidRoute:
+        return MaterialPageRoute(builder: (_) => const FirstAidScreen());
+      case AppConstants.aboutRoute:
+        return MaterialPageRoute(builder: (_) => const AboutScreen());
 
     // ── Fallback ────────────────────────────────────────────────
       default:
