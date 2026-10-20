@@ -11,6 +11,8 @@ import 'providers/user_provider.dart';        // ← Phase 3 addition
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'providers/sos_provider.dart'; // ← Phase 6 addition
+import 'providers/face_lock_provider.dart';
+import 'providers/hospital_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +38,8 @@ class JanRakshaApp extends StatelessWidget {
         // Phase 5 will add: ChangeNotifierProvider(create: (_) => VitalsProvider()),
         ChangeNotifierProvider(create: (_) => VitalsProvider()),
         ChangeNotifierProvider(create: (_) => SosProvider()),
+        ChangeNotifierProvider(create: (_) => FaceLockProvider()),
+        ChangeNotifierProvider(create: (_) => HospitalProvider()),
       ],
       child: MaterialApp(
         title: 'JanRaksha ID',

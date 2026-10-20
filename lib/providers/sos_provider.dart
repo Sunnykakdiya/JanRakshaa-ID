@@ -71,6 +71,7 @@ class SosProvider extends ChangeNotifier {
           startSosCountdown(user: user, spokenContext: _recognizedWords);
         }
       },
+
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 5),
     );

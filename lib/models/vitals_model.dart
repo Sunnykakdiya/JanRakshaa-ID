@@ -109,7 +109,7 @@ class VitalsAlert {
       final findingsText = findingsMatch.group(1)?.trim() ?? '';
       findings = findingsText
           .split('\n')
-          .map((l) => l.replaceFirst(RegExp(r'^[•\-\*]\s*'), '').trim())
+          .map((l) => l.replaceFirst(RegExp(r'^[•\-*]\s*'), '').trim())
           .where((l) =>
       l.isNotEmpty && !l.toLowerCase().contains('none detected'))
           .toList();

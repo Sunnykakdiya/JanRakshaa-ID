@@ -32,6 +32,12 @@ import '../screens/vitals/vitals_chart_screen.dart';
 // Phase 6 - SOS
 import '../screens/sos/voice_sos_screen.dart';
 
+//Phase 7 - biomatric
+import '../screens/biometric/face_lock_screen.dart';
+
+// Phase 8 - hospital
+import '../screens/hospital/hospital_finder_screen.dart';
+
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -78,6 +84,17 @@ class AppRouter {
         // ── Phase 6: SOS ───────────────────────────────────────
       case AppConstants.sosRoute:
         return MaterialPageRoute(builder: (_) => const VoiceSosScreen());
+
+        // ── Phase 7: Biometric ───────────────────────────────────
+      case AppConstants.faceLockRoute:
+        final redirectRoute = settings.arguments as String?;
+        return MaterialPageRoute(
+          builder: (_) => FaceLockScreen(redirectRoute: redirectRoute),
+        );
+
+        // ── Phase 8: Hospital ───────────────────────────────────
+      case AppConstants.hospitalFinderRoute:
+        return MaterialPageRoute(builder: (_) => const HospitalFinderScreen());
 
 
     // ── Fallback ────────────────────────────────────────────────

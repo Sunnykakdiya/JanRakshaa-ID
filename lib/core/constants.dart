@@ -27,6 +27,8 @@ class AppConstants {
   static const String vitalsRoute = '/vitals';
   static const String vitalsChartRoute = '/vitals-chart'; // ← Added here
   static const String sosRoute = '/sos';
+  static const String faceLockRoute = '/face-lock';
+  static const String hospitalFinderRoute = '/hospital-finder';
 
   // ── Blood Groups ──────────────────────────────────────────────────────
   static const List<String> bloodGroups = [
